@@ -75,6 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let level = match opt.verbosity {
             1 => "merino=DEBUG",
             2 => "merino=TRACE",
+            3 => "merino=ERROR",
             _ => "merino=INFO",
         };
         env::set_var("RUST_LOG", level);
@@ -154,8 +155,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let authed_users = authed_users?;
 
+    let mut white_list_ip: Vec<String> = Vec::new();
+    // 打开文件
+    let file = std::fs::File::open("/etc/rustsock/white_list_ip.txt").unwrap_or_else(|e| {
+        error!("Can't open file {:?}: {}", "white_list_ip.txt", e);
+        std::process::exit(1);
+    });
+    // 对于每行ip地址，加入到白名单中
+    let mut rdr = csv::Reader::from_reader(file);
+
+    for result in rdr.records() {
+        let record = result.unwrap();
+        white_list_ip.push(record[0].to_string());
+    }
+
     // Create proxy server
-    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users, None).await?;
+    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users, white_list_ip,None).await?;
 
     // Start Proxies
     merino.serve().await;

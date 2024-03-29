@@ -201,6 +201,7 @@ pub struct Merino {
     auth_methods: Arc<Vec<u8>>,
     // Timeout for connections
     timeout: Option<Duration>,
+    whitelist_ip: Arc<Vec<String>>,
 }
 
 impl Merino {
@@ -210,6 +211,7 @@ impl Merino {
         ip: &str,
         auth_methods: Vec<u8>,
         users: Vec<User>,
+        whitelist_ip: Vec<String>,
         timeout: Option<Duration>,
     ) -> io::Result<Self> {
         info!("Listening on {}:{}", ip, port);
@@ -217,6 +219,7 @@ impl Merino {
             listener: TcpListener::bind((ip, port)).await?,
             auth_methods: Arc::new(auth_methods),
             users: Arc::new(users),
+            whitelist_ip: Arc::new(whitelist_ip),
             timeout,
         })
     }
@@ -224,6 +227,21 @@ impl Merino {
     pub async fn serve(&mut self) {
         info!("Serving Connections...");
         while let Ok((stream, client_addr)) = self.listener.accept().await {
+            let whitelist_ip = self.whitelist_ip.clone();
+            if !whitelist_ip.is_empty() {
+                let client_addr_c = client_addr.clone();
+                let mut is_whitelist: bool = false;
+                for ip in whitelist_ip.iter() {
+                    if client_addr_c.ip().to_string() == *ip {
+                        is_whitelist = true;
+                        break;
+                    }
+                }
+                if !is_whitelist {
+                    warn!("Client not in whitelist: {:?}", client_addr);
+                    continue;
+                }
+            }
             let users = self.users.clone();
             let auth_methods = self.auth_methods.clone();
             let timeout = self.timeout.clone();
