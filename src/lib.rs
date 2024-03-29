@@ -6,9 +6,11 @@ extern crate log;
 use snafu::Snafu;
 
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use ipnetwork::IpNetwork;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, lookup_host};
@@ -226,8 +228,8 @@ impl Merino {
 
     pub async fn serve(&mut self) {
         info!("Serving Connections...");
+        let whitelist_ip = self.whitelist_ip.clone();
         while let Ok((stream, client_addr)) = self.listener.accept().await {
-            let whitelist_ip = self.whitelist_ip.clone();
             if !whitelist_ip.is_empty() {
                 let client_addr_c = client_addr.clone();
                 let mut is_whitelist: bool = false;
@@ -266,6 +268,13 @@ impl Merino {
         }
     }
 }
+
+fn ip_in_cidr(cidr: &str, ip: &str) -> bool {
+    let cidr = IpNetwork::from_str(cidr).expect("CIDR parsing failed");
+    let ip = IpAddr::from_str(ip).expect("IP parsing failed");
+    cidr.contains(ip)
+}
+
 
 pub struct SOCKClient<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     stream: T,

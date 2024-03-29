@@ -166,7 +166,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for result in rdr.records() {
         let record = result.unwrap();
-        white_list_ip.push(record[0].to_string());
+        let mut addr = record[0].to_string();
+        // 检查字符中是否包含/ 如果没有，当作/32
+        if !addr.contains("/") {
+            addr.push_str("/32");
+        }
+        white_list_ip.push(addr);
     }
 
     // Create proxy server
