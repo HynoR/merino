@@ -233,8 +233,8 @@ impl Merino {
             if !whitelist_ip.is_empty() {
                 let client_addr_c = client_addr.clone();
                 let mut is_whitelist: bool = false;
-                for ip in whitelist_ip.iter() {
-                    if client_addr_c.ip().to_string() == *ip {
+                for ip_cidr in whitelist_ip.iter() {
+                    if ip_in_cidr(ip_cidr, &client_addr_c.ip().to_string()) {
                         is_whitelist = true;
                         break;
                     }
