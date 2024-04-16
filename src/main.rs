@@ -63,6 +63,7 @@ struct Opt {
     quiet: bool,
 
     #[clap(short, long)]
+    /// Ip WhiteList setup
     white_list: Option<PathBuf>,
 }
 
