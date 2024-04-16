@@ -61,6 +61,9 @@ struct Opt {
     /// Do not output any logs (even errors!). Overrides `RUST_LOG`
     #[clap(short)]
     quiet: bool,
+
+    #[clap(short, long)]
+    white_list: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -155,23 +158,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let authed_users = authed_users?;
 
-    let mut white_list_ip: Vec<String> = Vec::new();
-    // 打开文件
-    let file = std::fs::File::open("/etc/rustsock/white_list_ip.txt").unwrap_or_else(|e| {
-        error!("Can't open file {:?}: {}", "white_list_ip.txt", e);
-        std::process::exit(1);
-    });
-    // 对于每行ip地址，加入到白名单中
-    let mut rdr = csv::Reader::from_reader(file);
+    let mut white_list_path = "/etc/rustsock/white_list_ip.txt";
+    if opt.white_list.is_some(){
+        white_list_path = opt.white_list.unwrap().to_str().unwrap();
+    }
 
-    for result in rdr.records() {
-        let record = result.unwrap();
-        let mut addr = record[0].to_string();
-        // 检查字符中是否包含/ 如果没有，当作/32
-        if !addr.contains("/") {
-            addr.push_str("/32");
+    let mut white_list_ip: Vec<String> = Vec::new();
+    let mut file_ok = true;
+    // 打开文件
+    let file = std::fs::File::open(white_list_path).unwrap_or_else(|e| {
+        error!("Can't open file {:?}: {}", "white_list_ip.txt", e);
+        file_ok = false;
+    });
+    if file_ok {
+        // 对于每行ip地址，加入到白名单中
+        let mut rdr = csv::Reader::from_reader(file);
+
+        for result in rdr.records() {
+            let record = result.unwrap();
+            let mut addr = record[0].to_string();
+            // 检查字符中是否包含/ 如果没有，当作/32
+            if !addr.contains("/") {
+                addr.push_str("/32");
+            }
+            white_list_ip.push(addr);
         }
-        white_list_ip.push(addr);
+    }else{
+        white_list_ip.push("127.0.0.1/32".to_string());
     }
 
     // Create proxy server
