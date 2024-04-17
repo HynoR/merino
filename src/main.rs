@@ -10,6 +10,8 @@ use std::env;
 use std::error::Error;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
+use std::fs::File;
+use std::io::{self, BufRead};
 
 /// Logo to be printed at when merino is run
 const LOGO: &str = r"
@@ -64,7 +66,7 @@ struct Opt {
 
     #[clap(short, long)]
     /// Ip WhiteList setup
-    white_list: Option<PathBuf>,
+    white_list: String,
 }
 
 #[tokio::main]
@@ -105,6 +107,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if opt.no_auth {
         auth_methods.push(merino::AuthMethods::NoAuth as u8);
     }
+
+    // TODO only One User Mode
+    
 
     // Enable username/password auth
     let authed_users: Result<Vec<User>, Box<dyn Error>> = match opt.users {
@@ -159,37 +164,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let authed_users = authed_users?;
 
-    let mut white_list_path = "/etc/rustsock/white_list_ip.txt";
-    if opt.white_list.is_some(){
-        white_list_path = opt.white_list.unwrap().to_str().unwrap();
-    }
-
     let mut white_list_ip: Vec<String> = Vec::new();
-    let mut file_ok = true;
-    // 打开文件
-    let file = std::fs::File::open(white_list_path).unwrap_or_else(|e| {
-        error!("Can't open file {:?}: {}", "white_list_ip.txt", e);
-        file_ok = false;
-    });
-    if file_ok {
-        // 对于每行ip地址，加入到白名单中
-        let mut rdr = csv::Reader::from_reader(file);
+    if opt.white_list.is_empty() {
+        white_list_ip.push("127.0.0.1/32".to_string());
+        info!("ip list empty");
+    } else {
+        // 打开文件
+        let input = File::open(&opt.white_list)?;
+        let buffered = io::BufReader::new(input);
 
-        for result in rdr.records() {
-            let record = result.unwrap();
-            let mut addr = record[0].to_string();
+        for line in buffered.lines() {
+            let record = line?;
+            let mut addr = record;
             // 检查字符中是否包含/ 如果没有，当作/32
             if !addr.contains("/") {
                 addr.push_str("/32");
             }
+            info!("Loaded white list ip: {}", &addr);
             white_list_ip.push(addr);
         }
-    }else{
-        white_list_ip.push("127.0.0.1/32".to_string());
     }
 
     // Create proxy server
-    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users, white_list_ip,None).await?;
+    let mut merino = Merino::new(
+        opt.port,
+        &opt.ip,
+        auth_methods,
+        authed_users,
+        white_list_ip,
+        None,
+    )
+    .await?;
 
     // Start Proxies
     merino.serve().await;
